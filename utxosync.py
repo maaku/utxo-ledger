@@ -258,6 +258,8 @@ def prune_output(txid_index, contract_index, hash, index):
 class ParentNotConnected(Exception):
     pass
 
+COINBASE_MATURITY = 100
+
 def connect_block(rpc, session, hash):
     block, transactions = get_block(rpc, session, hash)
 
@@ -270,6 +272,20 @@ def connect_block(rpc, session, hash):
         raise MissingBlockHeader(block.parent_hash)
     if parent.info is None:
         raise ParentNotConnected(block.parent_hash)
+
+    previous = parent
+    # -1 because we've already gone back to the parent
+    # -1 because the coinbase transaction is spendable COINBASE_MATURITY blocks
+    #   later, so it must exist in the committed ledger as of the block prior.
+    # So, COINBASE_MATURITY - 2
+    for _ in xrange(COINBASE_MATURITY-2):
+        if not previous.parent_hash:
+            break
+        previous = previous.info.parent
+
+    transactions = transactions[1:]
+    if previous.parent_hash:
+        transactions.append(previous.transactions[0])
 
     start_profile()
 
